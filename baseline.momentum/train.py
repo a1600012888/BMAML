@@ -46,6 +46,7 @@ def TrainOneTask(Task, M, SVGD, optimizer, DEVICE, num_of_step = 3, step_size = 
 
 
 def TrainOneTaskWithChaserLoss(Task, M, SVGD, optimizer, DEVICE, num_of_step = 3, step_size = 1e-3):
+    optimizer.zero_grad()
     X, Y, Xtest, Ytest, std = Task
     X = X.to(DEVICE)
     Y = Y.to(DEVICE)

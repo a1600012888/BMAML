@@ -47,12 +47,17 @@ for i in range(args.m - 1):
     m = torch.nn.ParameterList([torch.nn.Parameter(torch.randn_like(pa) * 0.01) for pa in paramsvec0])
     M.append(m)
 
+AllThetas = torch.nn.ParameterList()
+for paramsvec in M:
+    for param in paramsvec:
+        AllThetas.append(param)
 # init SVGD, kernel...
 criterion = torch.nn.MSELoss().to(DEVICE)
 logp = LogP(net, criterion)
 
 #optimizer = torch.optim.SGD(paramsvec0, lr = 0.1, momentum = 0.9, weight_decay=args.weight_decay)
-optimizer = torch.optim.Adam(paramsvec0, lr = 0.02 * args.m, weight_decay=args.weight_decay)
+#optimizer = torch.optim.Adam(paramsvec0, lr = 0.02 * args.m, weight_decay=args.weight_decay) # !!!
+optimizer = torch.optim.Adam(AllThetas, lr = 0.02 * args.m, weight_decay=args.weight_decay) # !!!
 lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30000, 50000, 70000, 90000], gamma=0.2)
 GetInnerStepSize = PolyLearningRatePolicy(lr = args.step_size, max_iter = args.epoch, poly = 0.9)
 

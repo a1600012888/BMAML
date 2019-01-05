@@ -14,9 +14,10 @@ class LogP(object):
         if net is not None:
             self.net = net
 
-    def __call__(self, retain_graph, paramsvec, ret_grad = True):
+    def __call__(self, retain_graph, paramsvec:torch.nn.ParameterList, ret_grad = True):
         pred = self.net.compute_graph(self.X, paramsvec)
         logp = self.criterion(pred, self.Y) / ((self.std ** 2) * -2.0)
+        # (y - y^) **  2 / std **2
 
         if ret_grad:
             grad = torch.autograd.grad(logp, paramsvec, create_graph=retain_graph, #retain_graph = retain_graph,
@@ -26,6 +27,7 @@ class LogP(object):
 
 
 def add_group(x, y, alpha = 1.0):
+    # x + y*alpha
     ret = []
     for i in range(len(x)):
         ret.append(x[i] + y[i] * alpha)
@@ -45,6 +47,9 @@ class RBFKernelOnWeights(object):
         self.sigma = sigma
 
     def __call__(self, x, y, retain_graph = False):
+        '''
+        retparam: kxy, dxkxy
+        '''
         vecx = parameters_to_vector(x)
         vecy = parameters_to_vector(y)
         r = vecx - vecy
