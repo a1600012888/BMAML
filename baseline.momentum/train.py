@@ -2,6 +2,7 @@ import torch
 from collections import OrderedDict
 from tqdm import tqdm
 from utils import AvgMeter
+from torch.nn.utils import vector_to_parameters, parameters_to_vector
 
 def TrainOneTask(Task, M, SVGD, optimizer, DEVICE, num_of_step = 3, step_size = 1e-3):
     X, Y, Xtest, Ytest, std = Task
@@ -97,8 +98,12 @@ def TrainOneTaskWithChaserLoss(Task, M, SVGD, optimizer, DEVICE, num_of_step = 3
 
     chaser_loss = 0
     for paramsvec, paramsvec_true in zip(M, M_true):
-        for param, param_true in zip(paramsvec, paramsvec_true):
-            chaser_loss = chaser_loss + torch.mean((param - param_true.detach()) ** 2)
+        vec = parameters_to_vector(paramsvec)
+        vec_true = parameters_to_vector(paramsvec_true).detach()
+        chaser_loss = chaser_loss + torch.dot((vec - vec_true),(vec - vec_true) )
+
+        #for param, param_true in zip(paramsvec, paramsvec_true):
+        #    chaser_loss = chaser_loss + torch.mean((param - param_true.detach()) ** 2)
 
     chaser_loss = chaser_loss / len(M)
     # Compute the true LogP of the whole set (For hyper-param tuning)
