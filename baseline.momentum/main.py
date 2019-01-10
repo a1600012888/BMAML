@@ -16,7 +16,7 @@ parser.add_argument('-d', type=int, default=4, help='Which gpu to use')
 parser.add_argument('-m', type=int, default=5, help='How many particles')
 parser.add_argument('--weight_decay', default=1e-4, type = float, help='weight decay (default: 5e-4)')
 parser.add_argument('--epoch', default=100000, type = int, help = 'The total number of iterations for meta-learning')
-parser.add_argument('--step_size', default=1e-2, type = float, help = 'The step size for the inner fitting')
+parser.add_argument('--step_size', default=5e-1, type = float, help = 'The step size for the inner fitting')
 parser.add_argument('--steps', default=1, type = int, help = 'Number of iterations for the inner fitting')
 parser.add_argument('--test_interval', default=200, type = int, help = 'How many iterations to between two test')
 parser.add_argument('--nb_task', default=100, type = int, help = 'Number of K-shot tasks for training')
@@ -42,9 +42,11 @@ net = ThreeLayer().to(DEVICE)
 paramsvec0 = net.params2vec()
 
 M = []
-M.append(paramsvec0)
-for i in range(args.m - 1):
-    m = torch.nn.ParameterList([torch.nn.Parameter(torch.randn_like(pa) * 0.01) for pa in paramsvec0])
+#M.append(paramsvec0)
+#for i in range(args.m - 1):
+for i in range(args.m):
+    #m = torch.nn.ParameterList([torch.nn.Parameter(torch.randn_like(pa) * 0.01) for pa in paramsvec0])
+    m = torch.nn.ParameterList([torch.nn.Parameter(torch.randn_like(pa) * 0.3) for pa in paramsvec0])
     M.append(m)
 
 AllThetas = torch.nn.ParameterList()
@@ -57,11 +59,11 @@ logp = LogP(net, criterion)
 
 #optimizer = torch.optim.SGD(paramsvec0, lr = 0.1, momentum = 0.9, weight_decay=args.weight_decay)
 #optimizer = torch.optim.Adam(paramsvec0, lr = 0.02 * args.m, weight_decay=args.weight_decay) # !!!
-optimizer = torch.optim.Adam(AllThetas, lr = 0.02 * args.m, weight_decay=args.weight_decay) # !!!
+optimizer = torch.optim.Adam(AllThetas, lr = 0.0002 * args.m, weight_decay=args.weight_decay) # !!!
 lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30000, 50000, 70000, 90000], gamma=0.2)
-GetInnerStepSize = PolyLearningRatePolicy(lr = args.step_size, max_iter = args.epoch, poly = 0.9)
+GetInnerStepSize = PolyLearningRatePolicy(lr = args.step_size, max_iter = args.epoch * 1.5, poly = 0.9)
 
-kernel = RBFKernelOnWeights(1.0)
+kernel = RBFKernelOnWeights(10.0)
 SVGD = SteinVariationalGradientDescentBase()
 SVGD.Kernel = kernel
 SVGD.NablaLogP = logp
@@ -73,9 +75,12 @@ pbar = tqdm(range(args.epoch))
 train_task_loader = tasks.TaskLoader(is_train = True, total_num_of_tasks = args.nb_task)
 val_task_loader = tasks.TaskLoader(is_train = False, total_num_of_tasks = 100)
 for i in pbar:
+
+    if i % 10000 == 10000 -1:
+        torch.save(M, 'particles-{}.p'.format(i))
     lr_scheduler.step()
 
-    args.step_size = GetInnerStepSize(i)
+    #args.step_size = GetInnerStepSize(i)
 
     train_task = next(train_task_loader)
 
