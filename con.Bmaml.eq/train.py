@@ -154,7 +154,7 @@ def test(TaskLoader, M, SVGD, DEVICE, num_of_step = 3, step_size = 1e-3):
 
             #Mt = SVGD.step(M, retain_graph=False, step_size=step_size)
             for tt in range(num_of_step):
-                M = SVGD.step(M, retain_graph = False, step_size = step_size)
+                M = SVGD.step(M, retain_graph = False, step_size = step_size / (len(task) -1 ))
 
 
         SVGD.NablaLogP.update(Xtest, Ytest, std)
