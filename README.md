@@ -12,6 +12,7 @@ Work in progress...
 * update README...
 
 
+## Each directory
 * For the full pipeline of continious adaptation, go to con.baseline.  
 * con.nornn:  Removes the rnn kernel from the full pipeline
 * con.baseline.stop:  Stop the gradient of history particles in rnn kernel
