@@ -12,14 +12,15 @@ from tensorboardX import SummaryWriter
 from utils import PolyLearningRatePolicy
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-d', type=int, default=3, help='Which gpu to use')
+parser.add_argument('-d', type=int, default=7, help='Which gpu to use')
 parser.add_argument('-m', type=int, default=5, help='How many particles')
 parser.add_argument('--weight_decay', default=1e-4, type = float, help='weight decay (default: 5e-4)')
 parser.add_argument('--epoch', default=100000, type = int, help = 'The total number of iterations for meta-learning')
-parser.add_argument('--step_size', default=5e-2, type = float, help = 'The step size for the inner fitting')
+parser.add_argument('--step_size', default=1e-1, type = float, help = 'The step size for the inner fitting')
 parser.add_argument('--steps', default=1, type = int, help = 'Number of iterations for the inner fitting')
 parser.add_argument('--test_interval', default=200, type = int, help = 'How many iterations to between two test')
 parser.add_argument('--nb_task', default=100, type = int, help = 'Number of K-shot tasks for training')
+parser.add_argument('--kernel_interval', default=2, type = int, help = 'Train kernel once every ... steps' )
 parser.add_argument('--time_step', default=3, type=int, help = 'The order of the markov chain')
 args = parser.parse_args()
 
@@ -65,8 +66,22 @@ lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
                                                     gamma=0.2)
 GetInnerStepSize = PolyLearningRatePolicy(lr = args.step_size, max_iter = args.epoch * 1.5, poly = 0.9)
 
+rnn_kernel_input_size = parameters_to_vector(paramsvec0).numel()
+print('rnn_kernel_input_size ', rnn_kernel_input_size)
+kernel = RecurrentRBFKernelOnWeights(input_size = rnn_kernel_input_size,
+                                     sigma = 10.0)
+kernel.RnnfWeights = kernel.RnnfWeights.to(DEVICE)
 
-kernel = RBFKernelOnWeights(10.0)
+kernel_optimizer = torch.optim.Adam(kernel.RnnfWeights.parameters(),
+                                    lr = 0.001 * args.m, weight_decay=args.weight_decay)
+
+kernel_lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(kernel_optimizer,
+                                                           milestones=[30000, 50000, 70000, 90000],
+                                                           gamma=0.2)
+# kernel.RnnfWeights.eval()
+for p in kernel.RnnfWeights.parameters():
+    p.requires_grad = False
+
 SVGD = SteinVariationalGradientDescentBase()
 SVGD.Kernel = kernel
 SVGD.NablaLogP = logp
@@ -81,12 +96,23 @@ for i in pbar:
 
     if i % 10000 == 10000-1:
         torch.save(M, 'particles-{}.p'.format(i))
+        torch.save(kernel.RnnfWeights.state_dict(), 'rnn-{}.p'.format(i))
     lr_scheduler.step()
+    kernel_lr_scheduler.step()
+
     #args.step_size = GetInnerStepSize(i)
 
     train_tasks = next(train_task_loader)
     ret_dic = TrainFewTaskFewStep(train_tasks, M, SVGD, optimizer, DEVICE, args.steps, args.step_size)
 
+    if i % (args.kernel_interval) == 0:
+        #for p in kernel.RnnfWeights.parameters():
+        #    p.requires_grad = True
+        kernel.RnnfWeights.train()
+        train_tasks = next(train_task_loader)
+        ret_dic = TrainFewTaskFewStep(train_tasks, M, SVGD, kernel_optimizer, DEVICE, args.steps, args.step_size)
+        for p in kernel.RnnfWeights.parameters():
+            p.requires_grad = False
 
     ret_dic.update({'inner_lr':args.step_size})
 

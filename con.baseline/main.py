@@ -16,12 +16,12 @@ parser.add_argument('-d', type=int, default=6, help='Which gpu to use')
 parser.add_argument('-m', type=int, default=5, help='How many particles')
 parser.add_argument('--weight_decay', default=1e-4, type = float, help='weight decay (default: 5e-4)')
 parser.add_argument('--epoch', default=100000, type = int, help = 'The total number of iterations for meta-learning')
-parser.add_argument('--step_size', default=2e-1, type = float, help = 'The step size for the inner fitting')
+parser.add_argument('--step_size', default=1e-1, type = float, help = 'The step size for the inner fitting')
 parser.add_argument('--steps', default=1, type = int, help = 'Number of iterations for the inner fitting')
-parser.add_argument('--test_interval', default=200, type = int, help = 'How many iterations to between two test')
+parser.add_argument('--test_interval', default=200, type = int, help = 'Number of iterations between two test')
 parser.add_argument('--nb_task', default=100, type = int, help = 'Number of K-shot tasks for training')
 parser.add_argument('--kernel_interval', default=2, type = int, help = 'Train kernel once every ... steps' )
-parser.add_argument('--time_step', default=3, type=int, help = 'The order of the markov chain')
+parser.add_argument('--time_step', default=3, type=int, help = 'The order of the markov chain(order + 1 = time_step)') # 3 means: task1,task2 -> task3
 args = parser.parse_args()
 
 # path ...
@@ -59,21 +59,20 @@ logp = LogP(net, criterion)
 
 #optimizer = torch.optim.SGD(paramsvec0, lr = 0.1, momentum = 0.9, weight_decay=args.weight_decay)
 #optimizer = torch.optim.Adam(paramsvec0, lr = 0.0002 * args.m, weight_decay=args.weight_decay)
-optimizer = torch.optim.Adam(AllThetas, lr = 0.0001 * args.m, weight_decay=args.weight_decay)
-
+optimizer = torch.optim.Adam(AllThetas, lr = 0.0001 * args.m, weight_decay=args.weight_decay) # change the initial meta-lr here
 lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
                                                     milestones=[30000, 50000, 70000, 90000],
                                                     gamma=0.2)
-GetInnerStepSize = PolyLearningRatePolicy(lr = args.step_size, max_iter = args.epoch * 1.5, poly = 0.9)
+GetInnerStepSize = PolyLearningRatePolicy(lr = args.step_size, max_iter = args.epoch * 1.5, poly = 0.9) # this line is not used! can be deleted!
 
 rnn_kernel_input_size = parameters_to_vector(paramsvec0).numel()
 print('rnn_kernel_input_size ', rnn_kernel_input_size)
 kernel = RecurrentRBFKernelOnWeights(input_size = rnn_kernel_input_size,
-                                     sigma = 10.0)
+                                     sigma = 10.0) # change the bandwidth of the kernel here.
 kernel.RnnfWeights = kernel.RnnfWeights.to(DEVICE)
 
 kernel_optimizer = torch.optim.Adam(kernel.RnnfWeights.parameters(),
-                                    lr = 0.001 * args.m, weight_decay=args.weight_decay)
+                                    lr = 0.001 * args.m, weight_decay=args.weight_decay) # change the learning rate for updating the rnn kernel here
 
 kernel_lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(kernel_optimizer,
                                                            milestones=[30000, 50000, 70000, 90000],
@@ -96,6 +95,7 @@ for i in pbar:
 
     if i % 10000 == 10000-1:
         torch.save(M, 'particles-{}.p'.format(i))
+        torch.save(kernel.RnnfWeights.state_dict(), 'rnn-{}.p'.format(i))
     lr_scheduler.step()
     kernel_lr_scheduler.step()
 

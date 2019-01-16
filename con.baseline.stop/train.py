@@ -63,21 +63,11 @@ def TrainFewTaskOneStep(Tasks, M, SVGD, optimizer, DEVICE, num_of_step = 3, step
     return ret_dic
 
 def TrainFewTaskFewStep(Tasks, M, SVGD, optimizer, DEVICE, num_of_step = 3, step_size = 1e-3):
-    '''
-    No rnn kernel
-    :param Tasks:
-    :param M:
-    :param SVGD:
-    :param optimizer:
-    :param DEVICE:
-    :param num_of_step:
-    :param step_size:
-    :return:
-    '''
     optimizer.zero_grad()
 
-    # HistroyThetas = [[] for i in range(num_of_step)] # used for recurrent kernel
+    HistroyThetas = [[] for i in range(num_of_step)] # used for recurrent kernel
     # HistoryThetas[i][j] = thetas in the i-th iteration of SVGD fitting for task j
+    # for the i-th step of SVGD, task1,task2,task3, taskj
     # HistoryThetas - [ [params after step1], [params after step2] , [params after step3]]
     # [params after step1] = [fit for task1, fit for task2, fit for task3, fit for task4..]
 
@@ -100,7 +90,16 @@ def TrainFewTaskFewStep(Tasks, M, SVGD, optimizer, DEVICE, num_of_step = 3, step
         SVGD.InitMomentumUpdaters()
 
         for j in range(num_of_step):
-            M = SVGD.step(M, retain_graph = True, step_size = step_size)
+
+            # If stop gradient
+            if len(HistroyThetas[j]) > 0:
+               for paramsvec in HistroyThetas[j][-1]:
+                    for param in paramsvec:
+                        param = param.detach() # no detach_
+
+            HistroyThetas[j].append(M)
+            M = SVGD.step(HistroyThetas[j], retain_graph = True, step_size = step_size)
+            HistroyThetas[j][-1] = M  # out put..
 
         SVGD.NablaLogP.update(nextXtest, nextYtest, nextstd)
 
@@ -143,7 +142,7 @@ def test_con(TaskLoader, M, SVGD, DEVICE, num_of_step = 3, step_size = 1e-3):
         pbar.set_description("Validation")
         M = raw_M
         Tasks = next(TaskLoader)
-        # HistroyThetas = [[] for i in range(num_of_step)] # used for recurrent kernel
+        HistroyThetas = [[] for i in range(num_of_step)] # used for recurrent kernel
         for i in range(len(Tasks) - 1):
             now_task = Tasks[i]
             next_task = Tasks[i+1]
@@ -161,13 +160,13 @@ def test_con(TaskLoader, M, SVGD, DEVICE, num_of_step = 3, step_size = 1e-3):
             SVGD.InitMomentumUpdaters()
 
             for j in range(num_of_step):
-                M = SVGD.step(M, retain_graph = False, step_size = step_size)
+
+                HistroyThetas[j].append(M)
+                M = SVGD.step(HistroyThetas[j], retain_graph = False, step_size = step_size)
+                HistroyThetas[j][-1] = M
                 #HistroyThetas[j].append(M)
 
             SVGD.NablaLogP.update(nextXtest, nextYtest, nextstd)
-            for paramsvec in M:
-                for param in paramsvec:
-                    pass
 
             if i == (len(Tasks) - 2):
                 logp = 0
@@ -175,8 +174,6 @@ def test_con(TaskLoader, M, SVGD, DEVICE, num_of_step = 3, step_size = 1e-3):
                     logp = logp + SVGD.NablaLogP(True, paramsvec, ret_grad=False)
                 logp = logp / len(M)
                 LogP.update(logp.item())
-
-        pbar.set_postfix({'test_logp':LogP.mean})
-
+        pbar.set_postfix({'logp': LogP.mean})
     return LogP.mean
 

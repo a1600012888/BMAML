@@ -67,6 +67,7 @@ def TrainFewTaskFewStep(Tasks, M, SVGD, optimizer, DEVICE, num_of_step = 3, step
 
     HistroyThetas = [[] for i in range(num_of_step)] # used for recurrent kernel
     # HistoryThetas[i][j] = thetas in the i-th iteration of SVGD fitting for task j
+    # for the i-th step of SVGD, task1,task2,task3, taskj
     # HistoryThetas - [ [params after step1], [params after step2] , [params after step3]]
     # [params after step1] = [fit for task1, fit for task2, fit for task3, fit for task4..]
 
@@ -160,26 +161,18 @@ def test_con(TaskLoader, M, SVGD, DEVICE, num_of_step = 3, step_size = 1e-3):
 
             for j in range(num_of_step):
 
-                if len(HistroyThetas[j]) > 0:
-                    for paramsvec in HistroyThetas[j][-1]:
-                        for param in paramsvec:
-                            pass
-                            #param.detach_()
                 HistroyThetas[j].append(M)
                 M = SVGD.step(HistroyThetas[j], retain_graph = False, step_size = step_size)
                 HistroyThetas[j][-1] = M
                 #HistroyThetas[j].append(M)
 
             SVGD.NablaLogP.update(nextXtest, nextYtest, nextstd)
-            for paramsvec in M:
-                for param in paramsvec:
-                    pass
 
             if i == (len(Tasks) - 2):
                 logp = 0
                 for paramsvec in M:
                     logp = logp + SVGD.NablaLogP(True, paramsvec, ret_grad=False)
-                #logp = logp / len(M)
+                logp = logp / len(M)
                 LogP.update(logp.item())
         pbar.set_postfix({'logp': LogP.mean})
     return LogP.mean

@@ -5,13 +5,10 @@ from config import add_group, divide_group
 
 
 class SteinVariationalGradientDescentBase(object):
-    '''
-    This SVGD is modified for a recurrent kernel
-    '''
 
 
     @abstractmethod
-    def Kernel(self, x:torch.Tensor, y:torch.Tensor,
+    def Kernel(self, x:torch.nn.ParameterList, y:torch.nn.ParameterList,
                retain_graph = False) -> Tuple[torch.Tensor, torch.Tensor]:
         '''
         Positive-definite Kernel
@@ -25,7 +22,7 @@ class SteinVariationalGradientDescentBase(object):
         pass
 
     @abstractmethod
-    def NablaLogP(self, retain_graph, x:torch.Tensor) -> torch.Tensor:
+    def NablaLogP(self, retain_graph, x:torch.nn.ParameterList) -> torch.Tensor:
 
         '''
         nabla_x logp(x)
@@ -37,6 +34,10 @@ class SteinVariationalGradientDescentBase(object):
         pass
 
     def InitMomentumUpdaters(self, num = None):
+        '''
+        Maintain a momentumupdater for each particle
+        use class MomentumRunningMean
+        '''
         if num is not None:
             self.momentum_updaters = []
             for i in range(num):
@@ -45,24 +46,14 @@ class SteinVariationalGradientDescentBase(object):
             for m in self.momentum_updaters:
                 m.reset()
 
-    def step(self, Xs:List[List[torch.nn.ParameterList]], step_size = 1e-3, retain_graph = False) -> List[torch.Tensor]:
+    def step(self, X:List[torch.nn.ParameterList], step_size = 1e-3, retain_graph = False) -> List[torch.nn.ParameterList]:
         '''
         Perform a single step of SVGD
         Arguments
-        param X:    -- (List[torch.Tensor]) list of particles
+        param X:    -- (List[torch.nn.ParameterList]) list of particles
         rparam: X': list of particles abtained by a single step of SVGD
-
-        Xs[t, j]
-
-        Xss: Xs[j, t]
-
-        Xj[t] ->
         '''
 
-        X = Xs[-1]
-        Xss = [ [Xs[j][i] for j in range(len(Xs))] for i in range(len(Xs[0])) ]
-        #print(Xss)
-        #print('lll', len(Xss), len(Xss[0]))
         M = len(X)
         Grads = []
         Ret = []
@@ -71,18 +62,17 @@ class SteinVariationalGradientDescentBase(object):
         for i in range(M):
             xi = X[i]
             dxlogps.append(self.NablaLogP(retain_graph, xi))
+
         for i in range(M): # This can be optimized by torch.nn.PairwiseDistance
             xi = X[i]
             #xi.retain_grad()
             gradi = [torch.zeros_like(xii) for xii in xi]
             for j in range(M):
-                #xj = X[j]
-                dxlogp = dxlogps[j]
+                xj = X[j]
                 #dxlogp = self.NablaLogP(retain_graph, xj)
-                #kxy, dxkxy = self.Kernel(xj, xi, retain_graph)
-                kxy, dxkxy = self.Kernel(Xss[j], Xss[i], retain_graph)
-                #print(dxkxy)
-                gradi = add_group(gradi, dxlogp, kxy /(1.0 * M))   # divide by M for normalize
+                dxlogp = dxlogps[j]
+                kxy, dxkxy = self.Kernel(xj, xi, retain_graph)
+                gradi = add_group(gradi, dxlogp, kxy /(1.0 * M))
                 gradi = add_group(gradi, dxkxy, 1.0/(1.0 * M))
                 #gradi = gradi + kxy * self.NablaLogP(retain_graph, xj)
                 #gradi = gradi + dxkxy
@@ -93,16 +83,18 @@ class SteinVariationalGradientDescentBase(object):
         for i in range(M):
             #X[i] = add_group(X[i], Grads[i], step_size)
             #print(Grads[i])
+
+            # delete the next line to disable momentum
             Grads[i] = self.momentum_updaters[i](Grads[i])
-            #print(Grads[i][0])
+
             Ret.append(add_group(X[i], Grads[i], step_size))
             #X[i] = X[i] + Grads[i] * step_size
         return Ret
 
 class MomentumRunningMean(object):
     '''
-    history <- history + momentum * now
-    normalize <- normalize + momentum * 1
+    history <- history * momentum + now
+    normalize <- normalize * momentum + 1
 
     ret: history / normalize
 
@@ -113,7 +105,7 @@ class MomentumRunningMean(object):
     def reset(self):
         self.history = None
         self.normalize = 0
-    def __call__(self, now, count = 1):
+    def __call__(self, now):
         if self.history is None:
             self.history = [torch.zeros_like(xx) for xx in now]
         self.history = add_group(now, self.history, self.momentum)
