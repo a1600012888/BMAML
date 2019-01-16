@@ -1,3 +1,9 @@
+## How to run
+* creat an empty directory named logs aside direcotry code
+* python3 Dataset.py to create simulated data.
+* python3 main.py to train
+
+
 ## Hyper-param tuning
 
 * meta-lr: line 62 in main.py
@@ -8,3 +14,9 @@
 * How long to train the kernel once:   line 23 in main.py
 * number of total training tasks: line 22 in main.py
 * How big is the rnn(number of hindden state):  line 72 in config.py
+
+
+## How to visulize
+* using jupyter to run visual.ipynb
+* run all the cells
+* you can run the last cell as many times as you like
